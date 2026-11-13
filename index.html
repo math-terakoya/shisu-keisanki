@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<!-- © 2026 math-terakoya ／ CC BY-NC-SA 4.0（表示・非営利・継承）https://creativecommons.org/licenses/by-nc-sa/4.0/deed.ja -->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;">
+<title>指数計算機</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { min-height: 100%; background: #000; color: #fff; font-family: 'Courier New', 'ＭＳ ゴシック', 'Osaka-Mono', monospace; }
+body { display: flex; justify-content: center; font-feature-settings: "palt"; }
+#app { width: 100%; max-width: 480px; padding: 10px 10px 30px; }
+h1 { font-size: 20px; color: #ffff00; letter-spacing: 2px; text-align: center; margin: 8px 0 4px; }
+.sub { font-size: 12px; color: #aaa; text-align: center; margin-bottom: 8px; line-height: 1.6; }
+.win { background: #000; border: 3px solid #fff; box-shadow: 0 0 0 3px #000, 0 0 0 5px #fff; padding: 12px; margin: 14px 6px; }
+.tag { font-size: 14px; color: #ffff00; letter-spacing: 1px; margin-bottom: 8px; }
+.row { display: flex; align-items: flex-end; justify-content: center; gap: 4px; flex-wrap: nowrap; }
+.row label { display: flex; flex-direction: column; align-items: center; font-size: 11px; color: #aaa; gap: 3px; min-width: 0; }
+.row label:first-child { flex: 1.3; } .row label:last-child { flex: 1; }   /* せまい 画面でも 横に はみ出さない */
+input { font-family: 'Times New Roman', 'Hiragino Mincho ProN', serif; background: #000; color: #fff; border: 2px solid #fff; text-align: center; outline: none; border-radius: 0; -webkit-appearance: none; }
+input:focus { border-color: #ffff00; }
+.base { width: 100%; font-size: 30px; padding: 6px 4px; color: #6fb2ff; }
+.expo { width: 100%; font-size: 20px; padding: 4px; color: #ff8fc8; margin-bottom: 26px; }
+.eq { font-family: 'Times New Roman', serif; font-size: 30px; padding: 0 4px 10px; }
+.out { margin-top: 12px; border-top: 1px dashed #666; padding-top: 10px; }
+.formula { font-family: 'Times New Roman', 'Hiragino Mincho ProN', serif; font-size: 22px; text-align: center; color: #ddd; }
+.formula sup { font-size: 0.65em; vertical-align: 0.7em; line-height: 0; color: #ff8fc8; }
+.formula .b { color: #6fb2ff; }
+.val { font-variant-numeric: tabular-nums; font-family: 'Times New Roman', 'Hiragino Mincho ProN', serif; font-size: 26px; text-align: center; margin-top: 6px; word-break: break-all; line-height: 1.35; color: #ffad5c; }
+.val sup { font-size: 0.6em; vertical-align: 0.7em; line-height: 0; }
+.note { font-size: 12px; color: #aaa; text-align: center; margin-top: 6px; line-height: 1.6; }
+.err { color: #ff6b6b; }
+.help { font-size: 12px; color: #aaa; line-height: 1.8; margin: 14px 10px 0; }
+.help b { color: #fff; font-weight: normal; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>指数計算機</h1>
+  <div class="sub">底と 指数を 入れると、値が 出ます。<br>A と B の 2つを 並べて 見られます。</div>
+
+  <div class="win" data-k="A">
+    <div class="tag">A</div>
+    <div class="row">
+      <label>底<input class="base" inputmode="decimal" value="2" aria-label="A の 底"></label>
+      <label>指数<input class="expo" inputmode="text" value="10" aria-label="A の 指数"></label>
+    </div>
+    <div class="out"><div class="formula"></div><div class="val"></div><div class="note"></div></div>
+  </div>
+
+  <div class="win" data-k="B">
+    <div class="tag">B</div>
+    <div class="row">
+      <label>底<input class="base" inputmode="decimal" value="3" aria-label="B の 底"></label>
+      <label>指数<input class="expo" inputmode="text" value="6" aria-label="B の 指数"></label>
+    </div>
+    <div class="out"><div class="formula"></div><div class="val"></div><div class="note"></div></div>
+  </div>
+
+  <div class="help">
+    ・<b>底</b>：正の 数（2、0.5、1/3 など）<br>
+    ・<b>指数</b>：整数・小数・分数・マイナス（3、−2、0.5、2/3 など）<br>
+    ・指数が 整数の ときは ちょうどの 値（整数なら 全部の 桁）。それ以外は 15桁 以上の 近い 値（≒）
+  </div>
+</div>
+<script id="core">
+'use strict';
+// ---------- 数の 読みとり：整数・小数・分数を 分数 [分子, 分母]（BigInt）に ----------
+const G = (a, b) => { a = a < 0n ? -a : a; b = b < 0n ? -b : b; while (b) [a, b] = [b, a % b]; return a; };
+function frac(n, d) { if (d < 0n) { n = -n; d = -d; } const g = G(n, d) || 1n; return [n / g, d / g]; }
+function parseNum(s) {
+  s = String(s).trim().replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/[−ー–—]/g, '-').replace(/[．。]/g, '.').replace(/[／]/g, '/').replace(/\s+/g, '');
+  if (!s) return null;
+  const m = s.match(/^([+-]?)(\d+(?:\.\d+)?|\.\d+)(?:\/(\d+(?:\.\d+)?))?$/);
+  if (!m) return null;
+  const dec = t => { const [i, f = ''] = t.split('.'); return frac(BigInt((i || '0') + f), 10n ** BigInt(f.length)); };
+  let [n, d] = dec(m[2]);
+  if (m[3] !== undefined) { const [n2, d2] = dec(m[3]); if (n2 === 0n) return null; [n, d] = frac(n * d2, d * n2); }
+  if (m[1] === '-') n = -n;
+  return [n, d];
+}
+// ---------- 計算 ----------
+const DIGITS = 20;   // 小数で 出す ときの 有効数字（15桁 以上）
+function decStr(n, d, sig) {   // 分数 n/d（正）を 有効数字 sig 桁の 小数に。割りきれれば そこで 止める
+  const ip = n / d; let r = n % d;
+  let s = ip.toString(), digits = ip === 0n ? 0 : s.length, frac = '', lead = ip === 0n;
+  let exact = r === 0n;
+  while (r !== 0n && digits < sig && frac.length < 400) { r *= 10n; const q = r / d; r %= d; frac += q.toString(); if (lead && q === 0n) continue; lead = false; digits++; }
+  if (r !== 0n) exact = false;
+  return { text: frac ? s + '.' + frac : s, exact };
+}
+function groupInt(s) { return s.replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function compute(baseStr, expStr) {
+  const b = parseNum(baseStr), e = parseNum(expStr);
+  if (!b) return { err: '底を 数で 入れて ください（2、0.5、1/3 など）' };
+  if (b[0] <= 0n) return { err: '底は 正の 数に して ください' };
+  if (!e) return { err: '指数を 数で 入れて ください（3、−2、0.5、2/3 など）' };
+  const [bn, bd] = b, [en, ed] = e;
+  if (ed === 1n && (en < 0n ? -en : en) <= 4000n) {   // 指数が 整数：ちょうどの 値
+    const k = en < 0n ? -en : en;
+    let n = bn ** k, d = bd ** k;
+    if (en < 0n) [n, d] = [d, n];
+    [n, d] = frac(n, d);
+    if (d === 1n) { const s = n.toString(); return { exact: true, intText: s, digits: s.length }; }
+    const r = decStr(n, d, DIGITS);
+    return { exact: r.exact, fracText: n.toString() + '/' + d.toString(), dec: r.text, small: n.toString().length + d.toString().length < 40 };
+  }
+  // 指数が 整数で ない（または とても 大きい）：近い 値
+  const lg = (Math.log10(Number(bn)) - Math.log10(Number(bd))) * (Number(en) / Number(ed));
+  if (!isFinite(lg)) return { err: '数が 大きすぎて 計算 できません' };
+  if (Math.abs(lg) < 15) {
+    const v = Math.pow(Number(bn) / Number(bd), Number(en) / Number(ed));
+    return { approx: true, dec: Number(v.toPrecision(17)).toPrecision(16).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '') };
+  }
+  const ex = Math.floor(lg), man = Math.pow(10, lg - ex);
+  return { approx: true, sci: [man.toPrecision(15), ex] };
+}
+window.ShisuCalc = { parseNum, compute };
+</script>
+<script>
+'use strict';
+const C = window.ShisuCalc;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const show = s => esc(String(s).trim().replace(/-/g, '−'));
+document.querySelectorAll('.win').forEach(w => {
+  const bi = w.querySelector('.base'), ei = w.querySelector('.expo');
+  const f = w.querySelector('.formula'), v = w.querySelector('.val'), nt = w.querySelector('.note');
+  const run = () => {
+    const r = C.compute(bi.value, ei.value);
+    f.innerHTML = '<span class="b">' + (bi.value.trim().includes('/') ? '(' + show(bi.value) + ')' : show(bi.value)) + '</span><sup>' + show(ei.value) + '</sup> ＝';
+    if (r.err) { v.innerHTML = ''; nt.innerHTML = '<span class="err">' + r.err + '</span>'; return; }
+    if (r.intText !== undefined) { v.textContent = r.intText.replace(/\B(?=(\d{3})+(?!\d))/g, ','); nt.textContent = r.digits + '桁（ちょうどの 値）'; return; }
+    if (r.fracText !== undefined) { v.innerHTML = (r.small ? esc(r.fracText) + '<br>' : '') + (r.exact ? '＝ ' : '≒ ') + esc(r.dec); nt.textContent = r.exact ? 'ちょうどの 値' : '小数は 有効数字 20桁'; return; }
+    if (r.sci) { v.innerHTML = '≒ ' + esc(r.sci[0]) + ' × 10<sup>' + esc(String(r.sci[1]).replace('-', '−')) + '</sup>'; nt.textContent = '近い 値（有効数字 15桁）'; return; }
+    v.textContent = '≒ ' + r.dec; nt.textContent = '近い 値（有効数字 15桁 以上）';
+  };
+  bi.addEventListener('input', run); ei.addEventListener('input', run); run();
+});
+</script>
+</body>
+</html>
